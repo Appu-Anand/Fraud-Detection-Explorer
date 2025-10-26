@@ -156,25 +156,35 @@ def predict_batch(model, scaler, numeric_cols, df):
 # SHAP explanations
 # -----------------------------
 import shap
-import matplotlib.pyplot as plt
 
-def explain_with_shap(model, scaler, numeric_cols, df_sample):
+def explain_with_shap(model, scaler, numeric_cols, df_sample, n_rows=5):
     """
-    Return list of matplotlib figures for SHAP explanations.
-    Works with XGBClassifier.
+    Returns SHAP figures.
     """
-    # Scale sample using the same scaler as training
+    import matplotlib.pyplot as plt
+
+    # Scale the numeric features
     df_scaled = df_sample.copy()
     df_scaled[numeric_cols] = scaler.transform(df_scaled[numeric_cols])
 
-    # Create SHAP TreeExplainer
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer(df_scaled[numeric_cols])
+    # Use booster for TreeExplainer
+    booster = model.get_booster()
+    explainer = shap.TreeExplainer(booster)
+    shap_values = explainer.shap_values(df_scaled[numeric_cols])
 
     figs = []
-    # Waterfall for each sample
-    for i in range(len(df_scaled)):
+
+    # Global summary plot
+    fig_summary = plt.figure()
+    shap.summary_plot(shap_values, df_scaled[numeric_cols], show=False)
+    figs.append(fig_summary)
+
+    # Per-row waterfall plots for first n_rows
+    for i in range(min(n_rows, len(df_scaled))):
         fig = plt.figure()
-        shap.plots.waterfall(shap_values[i], show=False)
+        shap.plots.waterfall(shap.Explanation(values=shap_values[i], 
+                                              base_values=explainer.expected_value, 
+                                              data=df_scaled[numeric_cols].iloc[i]))
         figs.append(fig)
+
     return figs
